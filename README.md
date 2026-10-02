@@ -9,7 +9,7 @@ source-specific bilingual vocabulary notes, and one-click local PDF copying.
 [使用说明](docs/USAGE.md) · [问题反馈](https://github.com/Wfssll/zotero-browser/issues) ·
 [隐私说明](PRIVACY.md)
 
-> **首个公开预发布版：1.8.3。** 当前安装范围为 **Zotero 9.0.x**。
+> **首个公开预发布版：0.0.1。** 当前安装范围为 **Zotero 9.0.x**。
 > 本机核验基于 macOS + Zotero 9.0.6；Windows/Linux 和完整安装包操作尚待验证。
 > 界面目前主要为中文。它是独立社区插件，与 Zotero 和 NASA ADS 无官方隶属关系。
 
@@ -20,7 +20,7 @@ source-specific bilingual vocabulary notes, and one-click local PDF copying.
 ## 安装
 
 1. 打开 [Releases](https://github.com/Wfssll/zotero-browser/releases)，下载
-   `zotero-browser-1.8.3.xpi`（不要下载 GitHub 自动生成的 Source code 压缩包）。
+   `zotero-browser-0.0.1.xpi`（不要下载 GitHub 自动生成的 Source code 压缩包）。
 2. Zotero → 工具 → 插件，点击齿轮 → 从文件安装插件，选择 `.xpi`。
 3. 在主工具栏点击地球图标打开右侧浏览器；再次点击可折叠。也可用
    `Command + Shift + B`（macOS）或 `Ctrl + Shift + B`（Windows/Linux）。

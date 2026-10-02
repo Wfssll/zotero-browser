@@ -1,6 +1,6 @@
 {
   "name": "zotero-browser",
-  "version": "1.8.3",
+  "version": "0.0.1",
   "description": "A powerful built-in web browser for Zotero",
   "main": "bootstrap.js",
   "scripts": {

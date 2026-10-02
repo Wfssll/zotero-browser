@@ -1,6 +1,6 @@
 # Release checklist and validation status
 
-## 1.8.3 public pre-release
+## 0.0.1 public pre-release
 
 - Local automated tests: run with `npm test`; no real library writes or Cookie reads.
 - XPI build: `npm run build`; package includes root MIT license, privacy notice,
@@ -11,7 +11,7 @@
 - Platform evidence: macOS + Zotero 9.0.6 read-only API/DOM probes for source
   resolution, popup integration, PDF clipboard transfer object, native fullZoom
   interface and CSS zoom support. Skin components inspected in a browser preview.
-- **Not complete**: installing the final 1.8.3 XPI and exercising every workflow;
+- **Not complete**: installing the final 0.0.1 XPI and exercising every workflow;
   Windows/Linux; individual chat-app PDF pastes; Zotero 7/8/10.
 
 ## Before a stable release

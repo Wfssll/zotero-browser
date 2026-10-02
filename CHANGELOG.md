@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.8.3 — First public pre-release
+## 0.0.1 — First public pre-release
 
 - Multi-tab academic browser with a persistent, collapsible Zotero dock.
 - Manual NASA ADS Cite popup, complete BibTeX copying/export and batch Cite notes.

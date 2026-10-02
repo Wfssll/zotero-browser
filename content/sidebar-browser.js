@@ -2642,7 +2642,7 @@ function zbBuildSidebarBrowser(doc, body, options = {}) {
   `;
   tutorialBox.innerHTML = `
     <div style="font-weight: 600; color: #2563eb; margin-bottom: 4px;">从本机浏览器自动导入，或继续手动粘贴</div>
-    <div>范围可选“当前域名”或“全部网站”。Chrome / Edge 在 macOS 上可能弹出钥匙串授权；Firefox 不需要解密。Safari 读取的是只读 Cookies.binarycookies，文件权限失败时可用下方“选择 Safari 文件”回退。二进制文件通常只包含持久化 Cookie，不能保证完整迁移登录态；若 Cookie 使用设备绑定或短期会话，仍需在站点重新登录。</div>
+    <div>范围可选“当前域名”或“全部网站”。Chrome / Edge 在 macOS 上可能弹出钥匙串授权；Firefox 不需要解密。Safari 读取的是只读 Cookies.binarycookies，macOS 未授权读取时，下方会显示权限说明；也可选择已授权的文件或可读副本。二进制文件通常只包含持久化 Cookie，不能保证完整迁移登录态；若 Cookie 使用设备绑定或短期会话，仍需在站点重新登录。</div>
     <div style="margin-top:4px;">手动方式也支持一次粘贴包含多个域名的完整 Cookie JSON；<code>name=value</code> 文本因不含域名，只能按上方域名导入。</div>
   `;
 
@@ -2674,7 +2674,7 @@ function zbBuildSidebarBrowser(doc, body, options = {}) {
   autoCookieLabel.style.fontWeight = "600";
   // 自定义下拉：原生 <select> 在 Zotero 侧栏里会被 Zotero 全局样式破坏
   // （选项堆叠渲染、互相重叠且遮挡点击），改用按钮 + 弹层列表实现。
-  function makeCookieDropdown(minWidth) {
+  function makeCookieDropdown(minWidth, onChange) {
     let current = null;
     let box = doc.createElement("div");
     box.style.cssText = "position:relative;flex:1;min-width:" + (minWidth || 120) + "px;";
@@ -2714,7 +2714,7 @@ function zbBuildSidebarBrowser(doc, body, options = {}) {
         btn.disabled = !!d;
         btn.style.opacity = d ? "0.55" : "1";
       },
-      setItems: (items, emptyLabel) => {
+      setItems: (items, emptyLabel, selectedValue) => {
         listEl.innerHTML = "";
         current = null;
         if (!items.length) {
@@ -2739,16 +2739,18 @@ function zbBuildSidebarBrowser(doc, body, options = {}) {
             current = item.value;
             btnLabel.textContent = item.label;
             hideList();
+            if (onChange) onChange(current);
           });
           listEl.appendChild(row);
         }
-        current = items[0].value;
-        btnLabel.textContent = items[0].label;
+        const selected = items.find(item => item.value === selectedValue) || items[0];
+        current = selected.value;
+        btnLabel.textContent = selected.label;
       }
     };
   }
 
-  let autoCookieSourceDropdown = makeCookieDropdown(150);
+  let autoCookieSourceDropdown = makeCookieDropdown(150, () => updateSafariCookieState());
   let autoCookieScopeDropdown = makeCookieDropdown(86);
   autoCookieScopeDropdown.element.style.flex = "0 0 auto";
   autoCookieScopeDropdown.element.title = "选择自动导入范围";
@@ -2775,6 +2777,13 @@ function zbBuildSidebarBrowser(doc, body, options = {}) {
   });
   safariFileRow.appendChild(safariFileHint);
   safariFileRow.appendChild(safariFileButton);
+  const safariRetryButton = createBtn("重新检测", "授权后重新检查 Safari 文件读取权限", () => detectLocalCookieSources());
+  safariFileRow.appendChild(safariRetryButton);
+  const safariAccessBox = doc.createElement("div");
+  safariAccessBox.setAttribute("role", "status");
+  safariAccessBox.style.cssText = "display:none;padding:10px 12px;border:1px solid var(--material-border,#d1d5db);border-radius:6px;font-size:11px;line-height:1.6;";
+  safariAccessBox.textContent = "macOS 尚未允许 Zotero 读取 Safari 数据。可在系统设置 → 隐私与安全性 → 完全磁盘访问权限中允许 Zotero，按系统提示重开 Zotero 后重试。此权限允许 Zotero 访问其他应用的数据，请自行决定是否授予；也可只选择你已授权的 Cookie 文件或可读副本。";
+
 
   let cookieTextarea = doc.createElement("textarea");
   cookieTextarea.placeholder = `在此粘贴从其他浏览器导出的 Cookie（JSON 格式或 name=value; 格式）...`;
@@ -2822,6 +2831,7 @@ function zbBuildSidebarBrowser(doc, body, options = {}) {
   cookieModal.appendChild(cookieDomainRow);
   cookieModal.appendChild(autoCookieRow);
   cookieModal.appendChild(safariFileRow);
+  cookieModal.appendChild(safariAccessBox);
   cookieModal.appendChild(cookieTextarea);
   cookieModal.appendChild(cookieActionRow);
 
@@ -2907,19 +2917,60 @@ function zbBuildSidebarBrowser(doc, body, options = {}) {
     }
   }
 
+  function safariCookieError(error) {
+    const name = error && error.name || "Error";
+    const message = String(error && error.message || "");
+    if (name === "NotAllowedError" || /NS_ERROR_FILE_ACCESS_DENIED|permission denied|operation not permitted/i.test(message)) {
+      const failure = new Error("macOS 未允许 Zotero 读取 Safari Cookie。请查看下方权限说明，或选择已授权的文件／可读副本。");
+      failure.code = "SAFARI_PERMISSION";
+      return failure;
+    }
+    if (name === "NotFoundError" || /NS_ERROR_FILE_NOT_FOUND/i.test(message)) {
+      const failure = new Error("Safari Cookie 文件已移动或不存在，请重新检测或选择文件。");
+      failure.code = "SAFARI_MISSING";
+      return failure;
+    }
+    const failure = new Error("Safari Cookie 文件读取失败（" + name + "），请重新选择文件后重试。");
+    failure.code = "SAFARI_READ";
+    return failure;
+  }
+
+  async function inspectSafariCookieFile(path) {
+    try {
+      // A successful existence check does not imply macOS allows reading.
+      // Detection reads only the four-byte format header, never cookie values.
+      const header = await IOUtils.read(path, { maxBytes: 4 });
+      const valid = header.length === 4 && header[0] === 99 && header[1] === 111 && header[2] === 111 && header[3] === 107;
+      return { access: valid ? "readable" : "invalid" };
+    } catch (error) {
+      const failure = safariCookieError(error);
+      return { access: failure.code === "SAFARI_PERMISSION" ? "blocked" : failure.code === "SAFARI_MISSING" ? "missing" : "error" };
+    }
+  }
+
+  function cookieSourceLabel(source) {
+    const state = source.type === "safari" && source.access === "blocked" ? " · 需要授权"
+      : source.type === "safari" && source.access === "invalid" ? " · 文件格式无效" : "";
+    return source.browserName + " — " + source.profileName + state;
+  }
+
+  function updateSafariCookieState() {
+    const source = autoCookieSources[Number(autoCookieSourceDropdown.getValue())];
+    const blocked = source && source.type === "safari" && source.access === "blocked";
+    safariAccessBox.style.display = blocked ? "block" : "none";
+    autoCookieButton.disabled = !source || !!blocked;
+    const safariSources = autoCookieSources.filter(item => item.type === "safari");
+    safariFileHint.textContent = blocked ? "Safari 读取被 macOS 阻止；授权后重新检测，或选择可读文件："
+      : safariSources.some(item => item.access === "readable") ? "Safari 文件已通过读取检查；也可选择其他文件："
+      : safariSources.some(item => item.access === "blocked") ? "Safari 文件需要授权；选择 Safari 来源查看说明："
+      : "未检测到可读 Safari 文件；可选择 Cookies.binarycookies：";
+  }
+
   async function addSafariCookieSource(list, path, profileName) {
-    if (!await pathExists(path)) {
-      return;
-    }
-    if (list.some(source => source.type === "safari" && source.path === path)) {
-      return;
-    }
-    list.push({
-      type: "safari",
-      browserName: "Safari",
-      profileName: profileName || "Cookies.binarycookies",
-      path
-    });
+    if (list.some(source => source.type === "safari" && source.path === path)) return;
+    const status = await inspectSafariCookieFile(path);
+    if (status.access === "missing" || status.access === "error") return;
+    list.push({ type: "safari", browserName: "Safari", profileName: profileName || "Cookies.binarycookies", path, ...status });
   }
 
   async function addSafariCookieSources(list, home) {
@@ -2972,46 +3023,36 @@ function zbBuildSidebarBrowser(doc, body, options = {}) {
   }
 
   async function chooseSafariCookieFile() {
-    let pickerClass = null;
     try {
-      pickerClass = Cc["@mozilla.org/filepicker;1"];
-    } catch (e) {}
-    if (!pickerClass || !Ci.nsIFilePicker) {
-      showToast("当前 Zotero 版本没有文件选择器，请把 Cookies.binarycookies 复制到可读位置后重试", "error");
-      return;
-    }
-    try {
-      let picker = pickerClass.createInstance(Ci.nsIFilePicker);
-      picker.init(doc.defaultView, "选择 Safari Cookies.binarycookies", Ci.nsIFilePicker.modeOpen);
+      // Zotero's wrapper supplies the required BrowsingContext on current Gecko.
+      const { FilePicker } = ChromeUtils.importESModule("chrome://zotero/content/modules/filePicker.mjs");
+      const picker = new FilePicker();
+      picker.init(doc.defaultView, "选择 Safari Cookies.binarycookies", picker.modeOpen);
       picker.appendFilter("Safari Cookies", "*.binarycookies");
-      picker.appendFilters(Ci.nsIFilePicker.filterAll);
-      let result = await new Promise(resolve => {
-        picker.open(rv => resolve({ rv, file: picker.file }));
-      });
-      if (!result || result.rv !== Ci.nsIFilePicker.returnOK || !result.file || !result.file.path) {
+      picker.appendFilters(picker.filterAll);
+      const current = autoCookieSources[Number(autoCookieSourceDropdown.getValue())];
+      if (current && current.path) picker.displayDirectory = PathUtils.parent(current.path);
+      const result = await picker.show();
+      if (result !== picker.returnOK || !picker.file) return;
+      const path = picker.file;
+      const status = await inspectSafariCookieFile(path);
+      if (status.access === "missing" || status.access === "error") {
+        showToast("选择的文件无法读取，请重新选择可读的 Cookies.binarycookies 文件", "error");
         return;
       }
-      let path = result.file.path;
-      if (!await pathExists(path)) {
-        showToast("选择的 Safari Cookie 文件不可读，请检查文件权限或复制后再试", "error");
+      if (status.access === "invalid") {
+        showToast("所选文件不是 Safari Cookies.binarycookies，请选择正确文件", "error");
         return;
       }
-      let source = {
-        type: "safari",
-        browserName: "Safari",
-        profileName: "手动选择",
-        path
-      };
+      const source = { type: "safari", browserName: "Safari", profileName: "手动选择", path, manuallySelected: true, ...status };
       autoCookieSources = [source].concat(autoCookieSources.filter(item => item.path !== path));
-      autoCookieSourceDropdown.setItems(autoCookieSources.map((item, index) => ({
-        value: String(index),
-        label: `${item.browserName} — ${item.profileName}`
-      })));
+      autoCookieSourceDropdown.setItems(autoCookieSources.map((item, index) => ({ value: String(index), label: cookieSourceLabel(item) })));
       autoCookieSourceDropdown.setDisabled(false);
-      autoCookieButton.disabled = false;
-      showToast("已选择 Safari Cookie 文件；请选择范围后点击“自动导入并刷新”", "info");
-    } catch (e) {
-      showToast("选择 Safari Cookie 文件失败：" + (e && e.message ? e.message : e) + "。可先复制文件到有权限的位置再选择", "error");
+      updateSafariCookieState();
+      showToast(status.access === "blocked" ? "所选文件仍被 macOS 阻止，请查看下方权限说明或选择可读副本"
+        : "已验证 Safari 文件可读；请选择范围后点击“自动导入并刷新”", status.access === "blocked" ? "error" : "info");
+    } catch (error) {
+      showToast("选择 Safari Cookie 文件失败（" + (error && error.name || "Error") + "），请重试", "error");
     }
   }
 
@@ -3020,11 +3061,17 @@ function zbBuildSidebarBrowser(doc, body, options = {}) {
       return;
     }
     detectingCookieSources = true;
+    const previousSource = autoCookieSources[Number(autoCookieSourceDropdown.getValue())];
     autoCookieSourceDropdown.setItems([], "正在检测本机浏览器…");
     autoCookieSourceDropdown.setDisabled(true);
     autoCookieButton.disabled = true;
 
+    const manualSources = autoCookieSources.filter(source => source.manuallySelected);
     let found = [];
+    for (const source of manualSources) {
+      const status = await inspectSafariCookieFile(source.path);
+      if (status.access !== "missing" && status.access !== "error") found.push({ ...source, ...status });
+    }
     try {
       let home = homePath();
       if (Zotero.isMac) {
@@ -3064,24 +3111,12 @@ function zbBuildSidebarBrowser(doc, body, options = {}) {
     }
 
     autoCookieSources = found;
-    if (!found.length) {
-      autoCookieSourceDropdown.setItems([], "未检测到受支持的浏览器配置");
-      autoCookieSourceDropdown.setDisabled(true);
-      autoCookieButton.disabled = true;
-      safariFileHint.textContent = "未检测到可读浏览器配置；可手动选择 Safari Cookies.binarycookies：";
-    } else {
-      autoCookieSourceDropdown.setItems(found.map((source, index) => ({
-        value: String(index),
-        label: `${source.browserName} — ${source.profileName}`
-      })));
-      autoCookieSourceDropdown.setDisabled(false);
-      autoCookieButton.disabled = false;
-      if (found.some(source => source.type === "safari")) {
-        safariFileHint.textContent = "Safari 文件已检测；权限失败时可手动选择：";
-      } else {
-        safariFileHint.textContent = "未检测到 Safari 文件；可手动选择 Cookies.binarycookies：";
-      }
-    }
+    const selectedIndex = previousSource ? found.findIndex(item => item.type === previousSource.type &&
+      (item.path || item.dbPath) === (previousSource.path || previousSource.dbPath)) : -1;
+    autoCookieSourceDropdown.setItems(found.map((source, index) => ({ value: String(index), label: cookieSourceLabel(source) })),
+      "未检测到受支持的浏览器配置", selectedIndex >= 0 ? String(selectedIndex) : undefined);
+    autoCookieSourceDropdown.setDisabled(!found.length);
+    updateSafariCookieState();
     detectingCookieSources = false;
   }
 
@@ -3274,8 +3309,11 @@ function zbBuildSidebarBrowser(doc, body, options = {}) {
     try {
       bytes = await IOUtils.read(source.path);
     } catch (e) {
-      throw new Error("无法读取 Safari Cookies.binarycookies（可能被 macOS 隐私权限阻止）；请点击“选择 Safari 文件”并选择可读副本");
+      const failure = safariCookieError(e);
+      source.access = failure.code === "SAFARI_PERMISSION" ? "blocked" : failure.code === "SAFARI_MISSING" ? "missing" : "error";
+      throw failure;
     }
+    source.access = "readable";
     let parsed;
     try {
       parsed = zbParseSafariBinaryCookies(bytes, { now: Math.floor(Date.now() / 1000) });
@@ -3410,7 +3448,7 @@ function zbBuildSidebarBrowser(doc, body, options = {}) {
     } catch (err) {
       showToast("自动导入失败：" + (err && err.message ? err.message : err), "error");
     } finally {
-      autoCookieButton.disabled = !autoCookieSources.length;
+      updateSafariCookieState();
       autoCookieButton.textContent = "自动导入并刷新";
     }
   }

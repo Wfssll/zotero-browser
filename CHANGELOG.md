@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.0.2 — Safari Cookie import fix
+
+- Use Zotero’s current FilePicker wrapper so selecting a Safari Cookie file works on current Gecko.
+- Accept cross-global Uint8Array/ArrayBuffer data returned by IOUtils; preserve byte offsets.
+- Check actual file readability, distinguish macOS access denial from missing/invalid files, and show persistent permission guidance.
+- Preserve manually selected files and the selected source when re-detecting; enable import after access becomes available.
+- System authorization remains required for protected Safari data. A readable copy can be selected instead. The plugin does not bypass macOS privacy controls.
+- 82 automated tests pass. Installed-package testing in macOS Zotero 9.0.6 confirms the native file picker, file validation and one-cookie domain-scoped import into Zotero’s cookie store using a synthetic file without login credentials.
+
 ## 0.0.1 — First public pre-release
 
 - Multi-tab academic browser with a persistent, collapsible Zotero dock.

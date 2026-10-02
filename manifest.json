@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Zotero Browser",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Browse academic websites and PDFs in Zotero, retrieve NASA ADS BibTeX, and collect bilingual vocabulary.",
   "homepage_url": "https://github.com/Wfssll/zotero-browser",
   "author": "Wfssll",

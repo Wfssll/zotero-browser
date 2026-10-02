@@ -9,7 +9,7 @@ source-specific bilingual vocabulary notes, and one-click local PDF copying.
 [使用说明](docs/USAGE.md) · [问题反馈](https://github.com/Wfssll/zotero-browser/issues) ·
 [隐私说明](PRIVACY.md)
 
-> **首个公开预发布版：0.0.1。** 当前安装范围为 **Zotero 9.0.x**。
+> **当前公开预发布版：0.0.2。** 当前安装范围为 **Zotero 9.0.x**。
 > 本机核验基于 macOS + Zotero 9.0.6；Windows/Linux 和完整安装包操作尚待验证。
 > 界面目前主要为中文。它是独立社区插件，与 Zotero 和 NASA ADS 无官方隶属关系。
 
@@ -20,7 +20,7 @@ source-specific bilingual vocabulary notes, and one-click local PDF copying.
 ## 安装
 
 1. 打开 [Releases](https://github.com/Wfssll/zotero-browser/releases)，下载
-   `zotero-browser-0.0.1.xpi`（不要下载 GitHub 自动生成的 Source code 压缩包）。
+   `zotero-browser-0.0.2.xpi`（不要下载 GitHub 自动生成的 Source code 压缩包）。
 2. Zotero → 工具 → 插件，点击齿轮 → 从文件安装插件，选择 `.xpi`。
 3. 在主工具栏点击地球图标打开右侧浏览器；再次点击可折叠。也可用
    `Command + Shift + B`（macOS）或 `Ctrl + Shift + B`（Windows/Linux）。
@@ -43,7 +43,7 @@ source-specific bilingual vocabulary notes, and one-click local PDF copying.
 | 皮肤与背景 | 十种配色、八张离线背景、图片预览与本地导入 |
 | 当前页面缩放 | `Command/Ctrl + +` / `-` / `0`；各标签页独立保存会话内比例 |
 | 保存到 Zotero | arXiv 元数据和 PDF；其他网页保存基础标题、网址和访问时间 |
-| 可选 Cookie 导入 | 手动导入；macOS 可尝试本地浏览器 Cookie，不保证完整迁移登录 |
+| 可选 Cookie 导入 | 手动导入；macOS Safari 支持权限检测、授权后的重新检测与可读副本选择 |
 
 Cite 显示 ADS 返回的原始 BibTeX。没有可靠匹配时会提示原因，不用其他数据库的
 结果冒充 ADS。批量任务建议在连接设置中配置

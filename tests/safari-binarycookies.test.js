@@ -249,3 +249,16 @@ test("fails closed for control characters in domains and offsets before the page
   assert.equal(forgedResult.stats.records, 1);
   assert.equal(forgedResult.stats.malformed, 1);
 });
+
+test("accepts bytes and ArrayBuffers from another Gecko/JS global without losing view offsets", () => {
+  const vm = require("node:vm");
+  const bytes = makeFile([makePage([makeRecord({ url: "example.com", name: "foreign", value: "synthetic", expiryMacSeconds: macSeconds(FIXED_NOW + 3600) })])]);
+  const foreign = vm.runInNewContext("(() => {const b=new Uint8Array(data.length+7);b.set(data,3);return b.subarray(3,3+data.length);})()", { data: Array.from(bytes) });
+  assert.equal(foreign instanceof Uint8Array, false);
+  const parsed = parseSafariBinaryCookies(foreign, { now: FIXED_NOW });
+  assert.equal(parsed.cookies.length, 1);assert.equal(parsed.cookies[0].name, "foreign");
+  const buffer = vm.runInNewContext("new Uint8Array(data).buffer", { data: Array.from(bytes) });
+  assert.equal(buffer instanceof ArrayBuffer, false);
+  assert.equal(parseSafariBinaryCookies(buffer, { now: FIXED_NOW }).cookies.length, 1);
+  assert.throws(() => parseSafariBinaryCookies({ buffer, byteLength: bytes.length }), /ArrayBuffer or Uint8Array/);
+});

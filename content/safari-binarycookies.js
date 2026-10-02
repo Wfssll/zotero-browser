@@ -23,16 +23,17 @@
   const COOKIE_HEADER_SIZE = 56;
 
   function asBytes(input) {
-    if (input instanceof Uint8Array) {
+    // IOUtils and the parser can live in different Gecko globals. instanceof
+    // rejects a valid foreign Uint8Array/ArrayBuffer; use native brand checks.
+    if (ArrayBuffer.isView(input)) {
       return new Uint8Array(input.buffer, input.byteOffset, input.byteLength);
     }
-    if (input instanceof ArrayBuffer) {
-      return new Uint8Array(input);
+    try {
+      const length = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, "byteLength").get.call(input);
+      return new Uint8Array(input, 0, length);
+    } catch (_) {
+      throw new TypeError("binarycookies input must be an ArrayBuffer or Uint8Array");
     }
-    if (input && input.buffer instanceof ArrayBuffer && typeof input.byteLength === "number") {
-      return new Uint8Array(input.buffer, input.byteOffset || 0, input.byteLength);
-    }
-    throw new TypeError("binarycookies input must be an ArrayBuffer or Uint8Array");
   }
 
   function sameMagic(bytes, offset, magic) {

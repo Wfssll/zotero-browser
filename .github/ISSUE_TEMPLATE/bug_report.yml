@@ -5,7 +5,7 @@ body:
     id: versions
     attributes:
       label: Plugin, Zotero and OS versions / 版本与系统
-      placeholder: Zotero Browser 0.0.1; Zotero 9.0.6; macOS
+      placeholder: Zotero Browser 0.0.2; Zotero 9.0.6; macOS
     validations:
       required: true
   - type: textarea

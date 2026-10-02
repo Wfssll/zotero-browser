@@ -1,5 +1,13 @@
 # Release checklist and validation status
 
+## 0.0.2 Safari fix validation
+
+- 82 automated tests pass, including access denial, readable/invalid files, picker cancellation, source retention, domain filtering and cross-global binary views.
+- Installed the 0.0.2 XPI in macOS Zotero 9.0.6. The real file picker opens, a synthetic readable binarycookies file passes validation, and domain-scoped import reports one cookie; the native cookie store independently confirms that record.
+- The protected Safari source is correctly classified as blocked before import.
+- File selection now uses the installed Zotero FilePicker wrapper, which passes BrowsingContext to Gecko.
+- Reading the user’s original protected Safari file still requires macOS authorization or a user-provided readable copy. The plugin does not grant or bypass that permission.
+
 ## 0.0.1 public pre-release
 
 - Local automated tests: run with `npm test`; no real library writes or Cookie reads.

@@ -1,0 +1,27 @@
+name: Bug report / 问题反馈
+description: Report reproducible behavior without tokens, cookies or private library data.
+body:
+  - type: input
+    id: versions
+    attributes:
+      label: Plugin, Zotero and OS versions / 版本与系统
+      placeholder: Zotero Browser 1.8.3; Zotero 9.0.6; macOS
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce / 复现步骤
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Expected and actual behavior / 预期与实际结果
+    validations:
+      required: true
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: Screenshots or logs / 截图或日志
+      description: Remove tokens, cookies and private paper/library information first.

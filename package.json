@@ -1,0 +1,31 @@
+{
+  "name": "zotero-browser",
+  "version": "1.8.3",
+  "description": "A powerful built-in web browser for Zotero",
+  "main": "bootstrap.js",
+  "scripts": {
+    "build": "node build.js",
+    "test": "node --test tests/*.test.js",
+    "release:assets": "node scripts/release-assets.js"
+  },
+  "keywords": [
+    "zotero",
+    "plugin",
+    "browser",
+    "scholar",
+    "research"
+  ],
+  "author": "Wfssll",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Wfssll/zotero-browser.git"
+  },
+  "homepage": "https://github.com/Wfssll/zotero-browser",
+  "bugs": {
+    "url": "https://github.com/Wfssll/zotero-browser/issues"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

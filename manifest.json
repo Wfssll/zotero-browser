@@ -1,0 +1,20 @@
+{
+  "manifest_version": 2,
+  "name": "Zotero Browser",
+  "version": "1.8.3",
+  "description": "Browse academic websites and PDFs in Zotero, retrieve NASA ADS BibTeX, and collect bilingual vocabulary.",
+  "homepage_url": "https://github.com/Wfssll/zotero-browser",
+  "author": "Wfssll",
+  "icons": {
+    "48": "content/icons/icon-48.png",
+    "96": "content/icons/icon-96.png"
+  },
+  "applications": {
+    "zotero": {
+      "id": "zotero-browser@custom.plugin",
+      "update_url": "https://raw.githubusercontent.com/Wfssll/zotero-browser/main/updates.json",
+      "strict_min_version": "9.0",
+      "strict_max_version": "9.0.*"
+    }
+  }
+}

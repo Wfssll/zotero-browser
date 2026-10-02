@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src chrome: resource:; img-src chrome: resource: blob: data:; style-src 'unsafe-inline' chrome: resource:; script-src chrome: resource: 'unsafe-inline'; worker-src chrome: resource: blob:; connect-src * chrome: resource:;">
+  <title>PDF 阅读器</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: #525659;
+      color: #f3f4f6;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      overflow: hidden;
+    }
+    #toolbar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      height: 34px;
+      padding: 0 8px;
+      background: #323639;
+      border-bottom: 1px solid #1f2123;
+      flex-shrink: 0;
+      font-size: 12px;
+      user-select: none;
+      position: relative;
+      z-index: 5;
+    }
+    #toolbar button {
+      height: 24px;
+      min-width: 24px;
+      padding: 0 8px;
+      border: 1px solid #4b5563;
+      border-radius: 4px;
+      background: #3f4346;
+      color: #f9fafb;
+      cursor: pointer;
+    }
+    #toolbar button:hover:not(:disabled) {
+      background: #4b5563;
+    }
+    #toolbar button:disabled {
+      opacity: 0.4;
+      cursor: default;
+    }
+    #page-info, #zoom-label, #status {
+      color: #d1d5db;
+      white-space: nowrap;
+    }
+    #page-input {
+      width: 40px;
+      height: 22px;
+      padding: 0 4px;
+      border: 1px solid #4b5563;
+      border-radius: 4px;
+      background: #3f4346;
+      color: #f9fafb;
+      font-size: 12px;
+      text-align: center;
+    }
+    #page-input:focus {
+      outline: none;
+      border-color: #60a5fa;
+    }
+    #status {
+      margin-left: auto;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    #pages {
+      height: calc(100% - 34px);
+      overflow: auto;
+      padding: 12px 0 24px;
+    }
+    .page-wrap {
+      margin: 0 auto 12px;
+      background: #ffffff;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+      line-height: 0;
+      position: relative;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: #ffffff;
+    }
+    /* Text layer: invisible text overlaid on the canvas so PDF text can be
+       selected and copied. Positions/sizes come from pdf.js TextLayer. */
+    .textLayer {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      line-height: 1;
+      text-align: initial;
+      text-size-adjust: none;
+      forced-color-adjust: none;
+      transform-origin: 0 0;
+      caret-color: transparent;
+      z-index: 1;
+      user-select: text;
+      -moz-user-select: text;
+    }
+    .textLayer :is(span, br) {
+      color: transparent;
+      position: absolute;
+      white-space: pre;
+      cursor: text;
+      transform-origin: 0 0;
+      user-select: text;
+      -moz-user-select: text;
+    }
+    .textLayer ::selection {
+      background: rgba(37, 99, 235, 0.35);
+      color: transparent;
+    }
+    /* Link layer: clickable regions for PDF link annotations. The container
+       must NOT catch pointer events (it covers the whole page and would
+       block text selection); only the links themselves are interactive. */
+    .linkLayer {
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      pointer-events: none;
+    }
+    .linkLayer a {
+      position: absolute;
+      display: block;
+      background: transparent;
+      border-radius: 2px;
+      pointer-events: auto;
+    }
+    .linkLayer a:hover {
+      background: rgba(37, 99, 235, 0.14);
+      outline: 1px solid rgba(37, 99, 235, 0.45);
+    }
+    /* 链接悬停预览小窗：浅色卡片浮在页面上方，内部链接可直接点击 */
+    #link-preview {
+      display: none;
+      position: fixed;
+      z-index: 50;
+      max-width: 440px;
+      padding: 8px;
+      background: #ffffff;
+      color: #111827;
+      border-radius: 8px;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+    #link-preview-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 6px;
+      color: #374151;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    #link-preview-header button {
+      border: 1px solid #d1d5db;
+      background: #f3f4f6;
+      color: #111827;
+      border-radius: 4px;
+      padding: 2px 10px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    #link-preview-header button:hover {
+      background: #e5e7eb;
+    }
+    #link-preview canvas {
+      display: block;
+      border: 1px solid #e5e7eb;
+      border-radius: 4px;
+      background: #ffffff;
+    }
+    .link-preview-ref {
+      margin-top: 8px;
+      padding-top: 6px;
+      border-top: 1px dashed #e5e7eb;
+    }
+    .link-preview-ref:first-child {
+      border-top: none;
+      padding-top: 0;
+    }
+    .link-preview-ref-label {
+      display: block;
+      margin-bottom: 2px;
+      color: #374151;
+      font-weight: 600;
+    }
+    .link-preview-link {
+      display: block;
+      color: #2563eb;
+      text-decoration: none;
+      word-break: break-all;
+      cursor: pointer;
+    }
+    .link-preview-link:hover {
+      text-decoration: underline;
+    }
+    .link-preview-tip {
+      margin-top: 6px;
+      color: #9ca3af;
+    }
+    #error {
+      display: none;
+      padding: 24px 16px;
+      text-align: center;
+      color: #fecaca;
+    }
+    #error.visible {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div id="toolbar">
+    <button id="btn-prev" title="上一页">‹</button>
+    <input id="page-input" type="text" value="–" title="输入页码后按回车直接跳转">
+    <span id="page-total">/ –</span>
+    <button id="btn-next" title="下一页">›</button>
+    <button id="btn-zoom-out" title="缩小">−</button>
+    <span id="zoom-label">100%</span>
+    <button id="btn-zoom-in" title="放大">+</button>
+    <button id="btn-fit" title="适合宽度">适应宽度</button>
+    <span id="status">准备加载 PDF…</span>
+  </div>
+  <div id="pages"></div>
+  <div id="error"></div>
+  <script src="./pdf-link-preview.js"></script>
+  <script src="./pdf-viewer.js"></script>
+</body>
+</html>

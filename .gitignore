@@ -1,0 +1,10 @@
+.DS_Store
+__MACOSX/
+node_modules/
+*.xpi
+dist/
+coverage/
+*.log
+.env
+.env.*
+!.env.example

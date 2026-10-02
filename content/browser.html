@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Zotero 内置浏览器</title>
+  <link rel="stylesheet" href="browser.css">
+</head>
+<body>
+  <div id="app">
+    <!-- 顶部主工具栏 -->
+    <header class="toolbar">
+      <!-- 导航按钮组 -->
+      <div class="nav-controls">
+        <button id="btn-back" class="btn-icon" title="后退 (Alt + ←)" disabled>
+          <svg viewBox="0 0 24 24" width="15" height="15" stroke="currentColor" stroke-width="2" fill="none">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+        </button>
+        <button id="btn-forward" class="btn-icon" title="前进 (Alt + →)" disabled>
+          <svg viewBox="0 0 24 24" width="15" height="15" stroke="currentColor" stroke-width="2" fill="none">
+            <polyline points="9 18 15 12 9 6"></polyline>
+          </svg>
+        </button>
+        <button id="btn-reload" class="btn-icon" title="刷新 (F5 / Ctrl+R)">
+          <svg id="reload-icon" viewBox="0 0 24 24" width="15" height="15" stroke="currentColor" stroke-width="2" fill="none">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <polyline points="1 20 1 14 7 14"></polyline>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+          </svg>
+        </button>
+        <button id="btn-home" class="btn-icon" title="主页 (学术导航)">
+          <svg viewBox="0 0 24 24" width="15" height="15" stroke="currentColor" stroke-width="2" fill="none">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+            <polyline points="9 22 9 12 15 12 15 22"></polyline>
+          </svg>
+        </button>
+      </div>
+
+      <!-- 搜索引擎选择器 -->
+      <div class="search-engine-selector">
+        <select id="search-engine" title="切换默认学术搜索引擎">
+          <option value="google">Google</option>
+          <option value="bing">必应</option>
+        </select>
+      </div>
+
+      <!-- 地址与搜索栏 -->
+      <div class="omnibar-container">
+        <span class="omnibar-icon" id="omnibar-icon">🔍</span>
+        <input
+          type="text"
+          id="url-input"
+          placeholder="输入网址或论文关键词直接搜索..."
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <button id="btn-clear" class="btn-clear" title="清空" style="display: none;">✕</button>
+        <button id="btn-go" class="btn-go" title="前往">➔</button>
+      </div>
+
+      <!-- 动作按钮组 -->
+      <div class="action-controls">
+        <button id="btn-save-zotero" class="btn-action btn-primary" title="将当前网页/文献保存到 Zotero 资料库">
+          <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+            <polyline points="17 21 17 13 7 13 7 21"></polyline>
+            <polyline points="7 3 7 8 15 8"></polyline>
+          </svg>
+          <span>保存到 Zotero</span>
+        </button>
+
+        <button id="btn-open-external" class="btn-action" title="在系统默认浏览器中打开">
+          <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+            <polyline points="15 3 21 3 21 9"></polyline>
+            <line x1="10" y1="14" x2="21" y2="3"></line>
+          </svg>
+          <span>外部打开</span>
+        </button>
+
+        <button id="btn-toggle-bookmarks" class="btn-icon" title="展开/收起常用学术书签">
+          ⭐
+        </button>
+      </div>
+    </header>
+
+    <!-- 常用学术书签导航栏 -->
+    <nav class="bookmarks-bar" id="bookmarks-bar">
+      <span class="bookmarks-label">学术导航:</span>
+      <button class="bookmark-item" data-url="https://arxiv.org">📑 arXiv</button>
+      <button class="bookmark-item" data-url="https://scholar.google.com">🎓 Google Scholar</button>
+      <button class="bookmark-item" data-url="https://pubmed.ncbi.nlm.nih.gov">🧬 PubMed</button>
+      <button class="bookmark-item" data-url="https://www.semanticscholar.org">🧠 Semantic Scholar</button>
+      <button class="bookmark-item" data-url="https://www.nature.com">🌿 Nature</button>
+      <button class="bookmark-item" data-url="https://www.sciencedirect.com">🔬 ScienceDirect</button>
+      <button class="bookmark-item" data-url="https://ieeexplore.ieee.org">⚡ IEEE Xplore</button>
+      <button class="bookmark-item" data-url="https://www.cnki.net">📚 知网 CNKI</button>
+      <button class="bookmark-item" data-url="https://dblp.org">💻 DBLP</button>
+    </nav>
+
+    <!-- 加载进度指示条 -->
+    <div class="progress-bar-container">
+      <div id="progress-bar" class="progress-bar"></div>
+    </div>
+
+    <!-- 网页视窗 -->
+    <main class="viewport">
+      <!-- 欢迎 / 快速学术导航视图 -->
+      <div id="welcome-view" class="welcome-view">
+        <div class="welcome-card">
+          <form id="home-search" class="home-search" role="search">
+            <input id="home-search-input" type="text" placeholder="搜索关键词或输入网址" aria-label="主页搜索关键词或网址" />
+            <button type="submit" aria-label="搜索" title="搜索"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="7"/><path d="m16 16 5 5"/></svg></button>
+          </form>
+
+          <div class="quick-grid">
+            <div class="quick-tile" data-url="https://arxiv.org">
+              <span class="tile-icon">📑</span>
+              <span class="tile-title">arXiv 预印本</span>
+              <span class="tile-desc">物理/数学/计算机/AI</span>
+            </div>
+            <div class="quick-tile" data-url="https://scholar.google.com">
+              <span class="tile-icon">🎓</span>
+              <span class="tile-title">Google Scholar</span>
+              <span class="tile-desc">全球学术文献搜索</span>
+            </div>
+            <div class="quick-tile" data-url="https://pubmed.ncbi.nlm.nih.gov">
+              <span class="tile-icon">🧬</span>
+              <span class="tile-title">PubMed</span>
+              <span class="tile-desc">生物与医学数据库</span>
+            </div>
+            <div class="quick-tile" data-url="https://www.semanticscholar.org">
+              <span class="tile-icon">🧠</span>
+              <span class="tile-title">Semantic Scholar</span>
+              <span class="tile-desc">AI 驱动的学术图谱</span>
+            </div>
+            <div class="quick-tile" data-url="https://www.nature.com">
+              <span class="tile-icon">🌿</span>
+              <span class="tile-title">Nature 期刊</span>
+              <span class="tile-desc">顶级前沿科学研究</span>
+            </div>
+            <div class="quick-tile" data-url="https://www.cnki.net">
+              <span class="tile-icon">📚</span>
+              <span class="tile-title">中国知网</span>
+              <span class="tile-desc">中文学术期刊文献库</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 核心嵌入 iframe -->
+      <iframe
+        id="web-frame"
+        src="about:blank"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+      ></iframe>
+
+      <!-- 跨域/限制内嵌提示卡片 -->
+      <div id="frame-fallback" class="frame-fallback" style="display: none;">
+        <div class="fallback-card">
+          <div class="fallback-icon">⚠️</div>
+          <h3>该网页限制在内嵌窗口中加载</h3>
+          <p id="fallback-url-text"></p>
+          <p class="fallback-desc">部分特定机构登录网关可能要求独立窗口。您可以点击下方按钮直接在系统默认浏览器中打开该页面。</p>
+          <div class="fallback-actions">
+            <button id="btn-fallback-external" class="btn-action btn-primary">在默认浏览器中打开</button>
+            <button id="btn-fallback-save" class="btn-action">保存此网页到 Zotero</button>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- 全局消息浮层 / Toast -->
+    <div id="toast-container" class="toast-container"></div>
+  </div>
+
+  <script src="browser.js"></script>
+</body>
+</html>

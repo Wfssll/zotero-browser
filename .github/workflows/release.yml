@@ -1,0 +1,51 @@
+name: Publish release
+on:
+  workflow_dispatch:
+    inputs:
+      prerelease:
+        description: Publish as an early-testing pre-release
+        type: boolean
+        default: true
+permissions:
+  contents: write
+concurrency:
+  group: publish-release
+  cancel-in-progress: false
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm test
+      - run: npm run build
+      - run: npm run release:assets
+      - name: Publish versioned package
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          tag="v$(node -p "require('./manifest.json').version")"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists; increment the version before releasing."
+            exit 1
+          fi
+          options=()
+          if [ "$PRERELEASE" = "true" ]; then options+=(--prerelease); fi
+          gh release create "$tag" dist/* --target "$GITHUB_SHA" --title "Zotero Browser $tag" --notes-file CHANGELOG.md "${options[@]}"
+      - name: Publish stable update channel
+        if: ${{ !inputs.prerelease }}
+        run: |
+          cp dist/updates.json updates.json
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add updates.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Update stable plugin channel"
+            git push origin HEAD:main
+          fi

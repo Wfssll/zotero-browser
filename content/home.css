@@ -1,0 +1,98 @@
+/* Home search is deliberately independent of theme and wallpaper colors. */
+.zotero-browser-sidebar-wrapper .zb-home-search {
+  min-height:54px;
+  background:#f8fafc !important;
+  color:#253044 !important;
+  border-color:#d9e0e9 !important;
+  color-scheme:light;
+  transition:box-shadow .18s;
+}
+.zotero-browser-sidebar-wrapper .zb-home-search:focus-within {
+  box-shadow:0 3px 16px rgba(0,0,0,.12),0 0 0 2px #b7cff5 !important;
+}
+.zotero-browser-sidebar-wrapper .zb-home-search select.zb-home-engine,
+.zotero-browser-sidebar-wrapper .zb-home-search input.zb-home-query {
+  appearance:none !important;
+  color-scheme:light !important;
+  border:0 !important;
+  border-radius:0 !important;
+  background:transparent !important;
+  color:#253044 !important;
+  caret-color:#253044 !important;
+  box-shadow:none !important;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif !important;
+  line-height:normal !important;
+  height:40px !important;
+  box-sizing:border-box !important;
+}
+.zotero-browser-sidebar-wrapper .zb-home-search input.zb-home-query::placeholder { color:#657084 !important;opacity:1 !important; }
+.zotero-browser-sidebar-wrapper .zb-home-search select.zb-home-engine {
+  flex:0 0 104px !important;
+  width:104px !important;
+  min-width:104px !important;
+  max-width:none !important;
+  padding:0 12px !important;
+  font-size:13px !important;
+}
+.zb-home-engine option { background:#f8fafc;color:#253044; }
+.zotero-browser-sidebar-wrapper .zb-home-search input.zb-home-query { padding:0 8px !important;font-size:14px !important; }
+.zotero-browser-sidebar-wrapper .zb-home-search button {
+  border:0 !important;
+  border-radius:50% !important;
+  background:transparent !important;
+  color:#253044 !important;
+}
+.zotero-browser-sidebar-wrapper .zb-home-search button:hover { background:#e4eaf2 !important; }
+.zb-home-tile { transition:transform .18s,box-shadow .18s;box-sizing:border-box; }
+.zb-home-tile:hover,.zb-home-tile:focus-visible { transform:translateY(-2px);box-shadow:0 4px 16px rgba(0,0,0,.1);outline:2px solid var(--zb-accent-soft,#dbeafe); }
+.zotero-browser-sidebar-wrapper .zb-home-has-background .zb-home-tile,
+.zotero-browser-sidebar-wrapper .zb-home-has-background .zb-home-add-site {
+  background:rgba(255,255,255,.91) !important;
+  color:#253044 !important;
+  border-color:rgba(255,255,255,.6) !important;
+  backdrop-filter:blur(14px);
+}
+.zb-home-has-background .zb-home-tile-description { color:#596579 !important; }
+.zotero-browser-sidebar-wrapper .zb-home-customize {
+  position:absolute;right:14px;bottom:14px;display:flex;align-items:center;gap:6px;
+  padding:7px 12px;font-size:11px;cursor:pointer;border-radius:20px !important;
+}
+.zotero-browser-sidebar-wrapper .zb-home-has-background .zb-home-customize { background:rgba(255,255,255,.91) !important;color:#253044 !important;border-color:transparent !important;backdrop-filter:blur(12px); }
+/* Native Zotero buttons have a fixed height: these visual cards must opt out. */
+.zotero-browser-sidebar-wrapper button.zb-theme-choice,
+.zotero-browser-sidebar-wrapper button.zb-wallpaper-choice {
+  appearance:none !important;
+  height:auto !important;
+  max-height:none !important;
+  flex-shrink:0;
+}
+.zotero-browser-sidebar-wrapper button.zb-theme-choice[aria-pressed="true"],
+.zotero-browser-sidebar-wrapper button.zb-wallpaper-choice[aria-pressed="true"] {
+  border-color:var(--accent-color,#2563eb) !important;
+  box-shadow:0 0 0 1px var(--accent-color,#2563eb) !important;
+}
+.zb-wallpaper-gallery { border-top:1px solid var(--material-border,#ddd);padding-top:12px;flex-shrink:0;min-width:0; }
+.zb-wallpaper-hint { font-size:10px;color:var(--fill-secondary,#637083);margin:5px 0 10px; }
+.zb-wallpaper-hero { position:relative;display:flex;align-items:center;justify-content:center;height:136px;overflow:hidden;border-radius:10px;background:var(--material-background,#eef0f5);border:1px solid var(--material-border,#ddd);font-size:11px; }
+.zb-wallpaper-hero-image { display:block;width:100%;height:100%;object-fit:cover; }
+.zb-wallpaper-hero-shade { position:absolute;inset:0;pointer-events:none; }
+.zb-wallpaper-summary { display:flex;align-items:center;justify-content:space-between;gap:8px;margin:9px 0;font-size:11px; }
+.zb-wallpaper-summary button { padding:5px 10px;cursor:pointer;font-size:11px; }
+.zb-wallpaper-grid { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:10px 0 14px; }
+.zotero-browser-sidebar-wrapper button.zb-wallpaper-choice {
+  display:flex;flex-direction:column;gap:6px;align-items:stretch;text-align:left;
+  padding:4px 4px 7px;cursor:pointer;min-width:0;min-height:80px;font-size:10px;
+}
+.zb-wallpaper-preview { position:relative;display:flex;align-items:center;justify-content:center;width:100%;height:52px;min-height:52px;flex:0 0 52px;overflow:hidden;border-radius:5px;background:var(--material-background,#eef0f5);font-size:15px; }
+.zb-wallpaper-thumbnail { display:block;width:100%;height:52px;object-fit:cover; }
+.zb-wallpaper-label { overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 2px; }
+.zb-wallpaper-current { position:absolute;top:3px;right:3px;display:flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;background:#fff;color:#253044;font-size:10px;box-shadow:0 1px 4px #0004; }
+.zb-wallpaper-gallery [hidden] { display:none !important; }
+.zb-wallpaper-actions { display:flex;gap:6px;flex-wrap:wrap;margin-top:10px; }
+.zb-wallpaper-actions button { padding:5px 8px;cursor:pointer;font-size:10px; }
+.zb-wallpaper-status { font-size:11px;margin:6px 0 0;overflow-wrap:anywhere; }
+.zb-wallpaper-status:empty { display:none; }
+.zb-wallpaper-controls { display:flex;flex-direction:column;gap:8px;font-size:11px; }
+.zb-wallpaper-controls label { display:flex;align-items:center;gap:8px; }
+.zb-wallpaper-controls input[type="range"] { flex:1;min-width:0; }
+.zb-wallpaper-controls select { height:30px; }

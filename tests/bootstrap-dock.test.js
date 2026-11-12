@@ -142,3 +142,66 @@ test("reopening the main-window dock preserves the browser instance and host", (
   assert.equal(creations, 1);
   assert.equal(initializations, 1);
 });
+
+test("a standalone reader window keeps its own dock and does not resolve to the main window", () => {
+  const readerBox = { id: "zotero-reader", style: {}, parentNode: null };
+  const row = {
+    localName: "hbox", style: {}, children: [],
+    appendChild(node) { node.parentNode = this; this.children.push(node); }
+  };
+  readerBox.parentNode = row;
+  const readerDoc = {
+    documentURI: "chrome://zotero/content/reader.xhtml",
+    documentElement: { id: "pdf-reader", getAttribute: (name) => (name === "windowtype" ? "zotero:reader" : "") },
+    getElementById(id) {
+      if (id === "zotero-reader") return readerBox;
+      if (id === "pdf-reader") return readerDoc.documentElement;
+      return null;
+    }
+  };
+  const readerWin = { closed: false, document: readerDoc };
+  const browser = { id: "browser", children: [], contains(child) { return this.children.includes(child); } };
+  const appcontent = { parentNode: browser };
+  browser.children.push(appcontent);
+  const pane = { id: "zotero-pane" };
+  const tabs = { id: "tabs-deck", children: [pane], contains(child) { return this.children.includes(child); } };
+  const paneStack = { id: "zotero-pane-stack", children: [tabs], contains(child) { return child === tabs || tabs.contains(child); } };
+  const mainDoc = {
+    documentURI: "chrome://zotero/content/zoteroPane.xhtml",
+    documentElement: { id: "main-window", getAttribute: () => "" },
+    getElementById(id) {
+      return { browser, appcontent, "zotero-pane-stack": paneStack, "tabs-deck": tabs, "zotero-pane": pane }[id] || null;
+    }
+  };
+  const mainWin = { closed: false, document: mainDoc, focused: 0, focus() { this.focused++; } };
+  const context = { getZoteroWindows: () => [mainWin] };
+  vm.createContext(context);
+  for (const name of ["zbNodeContains", "zbIsReaderWindow", "zbFindMainDockPlacement", "zbFindReaderDockPlacement", "zbResolveDockWindow"]) {
+    vm.runInContext(extractFunction(name), context);
+  }
+  const placement = context.zbFindReaderDockPlacement(readerWin);
+  assert.equal(placement.kind, "reader");
+  assert.equal(placement.container, row);
+  assert.equal(context.zbFindMainDockPlacement(readerWin), null);
+  assert.equal(context.zbFindMainDockPlacement(mainWin).kind, "main");
+  assert.equal(context.zbResolveDockWindow(readerWin), readerWin);
+  const plain = { closed: false, document: { documentURI: "about:blank", documentElement: { id: "", getAttribute: () => "" }, getElementById: () => null } };
+  assert.equal(context.zbResolveDockWindow(plain), mainWin);
+});
+
+test("a reader dock can collapse without changing the main window preference", () => {
+  const writes = [];
+  const setCollapsed = new Function(
+    "ZB_DOCK_COLLAPSED_WIDTH", "zbDockSaveCollapsed", "zbDockClampWidth",
+    `return (${extractFunction("zbDockSetCollapsed")});`
+  )(0, value => writes.push(value), () => 430);
+  const state = {
+    ownLayout: true, collapsed: true, width: 430, window: {},
+    root: { style: {}, setAttribute() {} }, splitter: { style: {} }, host: { style: {} },
+    collapseButton: { style: {}, setAttribute() {} }, contextLabel: { style: {} }
+  };
+  setCollapsed(state, false, true);
+  assert.equal(state.collapsed, false);
+  assert.equal(state.root.style.display, "flex");
+  assert.deepEqual(writes, []);
+});

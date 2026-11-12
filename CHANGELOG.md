@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.0.3 — Zotero 10 support and a browser for each window
+
+- Extend installation from Zotero 9.0.* to 10.0.*, including Zotero 10.0.6. The plugin ID and the Zotero 9 minimum stay the same.
+- Use plural collection and library selection for Cite and webpage saving, with Zotero 9 fallbacks.
+- Give a paper opened in its own window a separate browser. The button in that window no longer opens or focuses the main window. Each window keeps its own tabs; site logins stay shared.
+- Keep page transitions on the requested document, and present the embedded engine's own Firefox identity so verification pages are not carrying the app's extra product token.
+- 89 automated tests pass. macOS Zotero 10.0.6 confirmed installation and the main dock home. Windows/Linux and the standalone reader dock still need a manual check.
+
 ## 0.0.2 — Safari Cookie import fix
 
 - Use Zotero’s current FilePicker wrapper so selecting a Safari Cookie file works on current Gecko.

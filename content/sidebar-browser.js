@@ -2,7 +2,7 @@
  * Sidebar native Gecko browser UI.
  * Loaded into bootstrap.js scope via loadSubScript.
  */
-/* global Zotero, Services, Ci, Cc, ChromeUtils, Components, BrowserHub, zbIsPdfUrl, zbFetchPdfBuffer, zbCopyToLocalBuffer, pluginRootURI, zbParseSafariBinaryCookies */
+/* global Zotero, Services, Ci, Cc, ChromeUtils, Components, BrowserHub, zbIsPdfUrl, zbFetchPdfBuffer, zbCopyToLocalBuffer, pluginRootURI, zbParseSafariBinaryCookies, zbBrowserEnv */
 
 function zbCreateHomeSearch(doc, options) {
   const form = doc.createElement("form");
@@ -734,6 +734,9 @@ function zbBuildSidebarBrowser(doc, body, options = {}) {
       }
     }
     if (b === browser) {
+      // A verification widget only runs while its document is the foreground tab.
+      wakeBrowser(b);
+      uncoverNavigation();
       showCaptchaBar(b, url, !!d.hasWidget, !!d.blocked, !!d.loop, !!d.stuck);
     }
   }, true);
@@ -839,6 +842,9 @@ function zbBuildSidebarBrowser(doc, body, options = {}) {
     }
     try {
       if (browser.canGoBack) {
+        let tab = currentTab();
+        if (tab) tab.expectedUrl = "";
+        uncoverNavigation();
         browser.goBack();
       }
     } catch (e) {}
@@ -850,6 +856,9 @@ function zbBuildSidebarBrowser(doc, body, options = {}) {
     }
     try {
       if (browser.canGoForward) {
+        let tab = currentTab();
+        if (tab) tab.expectedUrl = "";
+        uncoverNavigation();
         browser.goForward();
       }
     } catch (e) {}
@@ -1039,6 +1048,17 @@ function zbBuildSidebarBrowser(doc, body, options = {}) {
     background: #ffffff;
   `;
 
+  let navCover = doc.createElement("div");
+  navCover.style.cssText = `
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    background: #ffffff;
+    opacity: 0;
+    pointer-events: none;
+  `;
+  let navCoverTimer = null;
+
   function createBrowserElement() {
     let b = doc.createXULElement ? doc.createXULElement("browser") : doc.createElement("browser");
     b.setAttribute("type", "content");
@@ -1046,13 +1066,19 @@ function zbBuildSidebarBrowser(doc, body, options = {}) {
     b.setAttribute("remote", "true");
     b.setAttribute("disableglobalhistory", "true");
     b.setAttribute("maychangeremoteness", "true");
+    // Do not queue a second about:blank load. That load races the requested
+    // document and is what paints a stale page before the new one.
+    b.setAttribute("nodefaultsrc", "true");
     b.setAttribute("autofind", "true");
     try {
       b.setAttribute("messagemanagergroup", "zotero-browser");
     } catch (e) {}
     b.style.cssText = `
       position: absolute;
-      inset: 0;
+      top: -10000px;
+      left: 0;
+      right: auto;
+      bottom: auto;
       width: 100%;
       height: 100%;
       min-height: 0;
@@ -1301,16 +1327,20 @@ function zbBuildSidebarBrowser(doc, body, options = {}) {
     let tab = currentTab();
     if (tab) {
       tab.homeOpen = true;
+      tab.expectedUrl = "";
     }
+    uncoverNavigation();
     closePdfViewer(false);
-    try {
-      browser.stop();
-    } catch (e) {}
     renderHomeSites();
     try {
       viewport.appendChild(welcomeView);
     } catch (e) {}
     welcomeView.style.display = "flex";
+    // Stop only after the home page covers the browser, so an aborted load
+    // cannot paint an older history entry in the viewport.
+    try {
+      browser.stop();
+    } catch (e) {}
     urlInput.value = "";
     currentPdfUrl = null;
     tab = currentTab();
@@ -1583,19 +1613,22 @@ function zbBuildSidebarBrowser(doc, body, options = {}) {
     startProgress(true);
 
     let tab = currentTab();
+    let viewerUrl = "resource://zotero-browser/content/pdf-viewer.html?file=" +
+      encodeURIComponent(url) + getPdfZoomQuery();
+    let replaceHistory = !!(tab && tab._zbFresh);
     if (tab) {
       tab.pdfOpen = true;
       tab.pdfUrl = url;
       tab.pdfBuffer = null;
       tab.url = url;
       tab.title = (url.split("/").pop() || "PDF").replace(/[?#].*$/, "");
+      tab.expectedUrl = viewerUrl;
+      tab._zbFresh = false;
     }
     renderTabBar();
 
-    let viewerUrl = "resource://zotero-browser/content/pdf-viewer.html?file=" +
-      encodeURIComponent(url) + getPdfZoomQuery();
     try {
-      loadURI(viewerUrl);
+      loadURI(viewerUrl, replaceHistory);
       showToast("正在在线预览 PDF；不会保存到 Zotero", "info");
     } catch (err) {
       stopProgress();
@@ -1837,25 +1870,128 @@ function zbBuildSidebarBrowser(doc, body, options = {}) {
     throw new Error("无法下载 PDF：" + (errors.join(" | ") || "无可用通道"));
   }
 
-  function loadURI(targetUrl, flags) {
-    let opts = {
-      triggeringPrincipal: SYSTEM_PRINCIPAL,
-      loadFlags: flags || Ci.nsIWebNavigation.LOAD_FLAGS_NONE
-    };
+  let cachedStockUA = "";
+  function currentStockUserAgent() {
+    if (cachedStockUA) return cachedStockUA;
     try {
-      if (browser.fixupAndLoadURIString) {
-        browser.fixupAndLoadURIString(targetUrl, opts);
+      let handler = Cc["@mozilla.org/network/protocol;1?name=http"].getService(Ci.nsIHttpProtocolHandler);
+      let extras = [];
+      try {
+        for (let pref of Services.prefs.getChildList("general.useragent.extra.")) {
+          try { extras.push(Services.prefs.getCharPref(pref)); } catch (e) {}
+        }
+      } catch (e) {}
+      let ua = typeof zbBrowserEnv !== "undefined"
+        ? zbBrowserEnv.stockUserAgent(handler.userAgent, extras)
+        : String(handler.userAgent || "");
+      if (ua) cachedStockUA = ua;
+      return ua;
+    } catch (e) {
+      return "";
+    }
+  }
+
+  function fingerprintResistanceEnabled() {
+    try {
+      return Services.prefs.getBoolPref("privacy.resistFingerprinting");
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // Align this browser with the embedded Firefox engine: same UA in the
+  // request and in the page, and a foreground document so verification
+  // widgets are allowed to run. Never rewrite a resist-fingerprinting profile.
+  function prepareContentBrowser(b) {
+    if (!b || fingerprintResistanceEnabled()) return;
+    try {
+      let bc = b.browsingContext;
+      let ua = currentStockUserAgent();
+      if (bc && ua && "customUserAgent" in bc && bc.customUserAgent !== ua) {
+        bc.customUserAgent = ua;
+      }
+    } catch (e) {}
+    try {
+      if (b.docShell) {
+        b.docShell.QueryInterface(Ci.nsILoadContext).useTrackingProtection = false;
+      }
+    } catch (e) {}
+  }
+
+  function wakeBrowser(b) {
+    prepareContentBrowser(b);
+    try {
+      if (b) b.docShellIsActive = true;
+    } catch (e) {}
+  }
+
+  function placeBrowser(b, active) {
+    if (!b) return;
+    try { b.hidden = !active; } catch (e) {}
+    b.style.position = "absolute";
+    b.style.width = "100%";
+    b.style.height = "100%";
+    b.style.right = "auto";
+    b.style.bottom = "auto";
+    b.style.left = "0";
+    b.style.top = active ? "0" : "-10000px";
+  b.style.visibility = active ? "visible" : "hidden";
+  b.style.zIndex = active ? "1" : "0";
+  // Keep every tab's document in the foreground. Parking an inactive tab
+  // offscreen is what stops its pixels from covering the page being opened;
+  // marking it inactive would throttle verification and in-progress loads.
+  try { b.docShellIsActive = true; } catch (e) {}
+  prepareContentBrowser(b);
+}
+
+  function coverNavigation() {
+    if (!navCover) return;
+    navCover.style.transition = "none";
+    navCover.style.opacity = "1";
+    navCover.style.pointerEvents = "auto";
+    if (navCoverTimer) clearTimeout(navCoverTimer);
+    navCoverTimer = setTimeout(uncoverNavigation, 8000);
+  }
+
+  function uncoverNavigation() {
+    if (navCoverTimer) {
+      clearTimeout(navCoverTimer);
+      navCoverTimer = null;
+    }
+    if (!navCover) return;
+    navCover.style.transition = "opacity 80ms ease";
+    navCover.style.opacity = "0";
+    navCover.style.pointerEvents = "none";
+  }
+
+  function locationIgnored(tab, spec, original) {
+    return !!(tab && tab.expectedUrl && typeof zbBrowserEnv !== "undefined" &&
+      zbBrowserEnv.shouldIgnoreLocation(tab.expectedUrl, spec, original));
+  }
+
+  function loadInBrowser(b, targetUrl, replaceHistory) {
+    let flags = replaceHistory
+      ? Ci.nsIWebNavigation.LOAD_FLAGS_REPLACE_HISTORY
+      : Ci.nsIWebNavigation.LOAD_FLAGS_NONE;
+    let opts = { triggeringPrincipal: SYSTEM_PRINCIPAL, loadFlags: flags };
+    prepareContentBrowser(b);
+    try {
+      if (b.fixupAndLoadURIString) {
+        b.fixupAndLoadURIString(targetUrl, opts);
         return;
       }
     } catch (e) {}
     try {
-      let uri = Services.io.newURI(targetUrl);
-      browser.loadURI(uri, opts);
+      b.loadURI(Services.io.newURI(targetUrl), opts);
       return;
     } catch (e) {}
     try {
-      browser.setAttribute("src", targetUrl);
+      b.setAttribute("src", targetUrl);
     } catch (e2) {}
+  }
+
+  function loadURI(targetUrl, replaceHistory) {
+    loadInBrowser(browser, targetUrl, !!replaceHistory);
   }
 
   function navigate(targetUrl) {
@@ -1867,18 +2003,25 @@ function zbBuildSidebarBrowser(doc, body, options = {}) {
       actualUrl = "https://arxiv.org" + actualUrl;
     }
     if (zbIsPdfUrl(actualUrl)) {
+      placeBrowser(browser, true);
       openPdf(actualUrl);
       return;
     }
 
     closePdfViewer(false);
+    placeBrowser(browser, true);
     hideWelcome();
     urlInput.value = actualUrl;
-    try {
-      browser.stop();
-    } catch (e) {}
+    let tab = currentTab();
+    let replaceHistory = !!(tab && tab._zbFresh);
+    if (tab) {
+      tab.expectedUrl = actualUrl;
+      tab._zbFresh = false;
+    }
+    // Do not call stop() before the load: that paints the previous history entry.
+    wakeBrowser(browser);
     startProgress(true);
-    loadURI(actualUrl);
+    loadURI(actualUrl, replaceHistory);
   }
 
   function arxivAbsFromPdf(url) {
@@ -2045,6 +2188,19 @@ function zbBuildSidebarBrowser(doc, body, options = {}) {
         }
         let spec = aLocation && aLocation.spec;
         let tab = tabs.find(t => t.browser === b);
+        let original = "";
+        try {
+          let channel = aRequest && aRequest.QueryInterface(Ci.nsIChannel);
+          original = (channel && channel.originalURI && channel.originalURI.spec) || "";
+        } catch (e) {}
+        // Keep a stale history entry from becoming the visible page or the
+        // address-bar value while the requested document is still loading.
+        if (locationIgnored(tab, spec, original)) {
+          if (b === browser && /^https?:/i.test(spec || "")) coverNavigation();
+          return;
+        }
+        if (b === browser) uncoverNavigation();
+        if (tab) tab.expectedUrl = "";
         // 页面发生跳转（含验证通过后跳转）时，清除该标签页的人机验证标记
         if (tab) {
           tab.captchaInfo = null;
@@ -2103,15 +2259,19 @@ function zbBuildSidebarBrowser(doc, body, options = {}) {
           return;
         }
         if (aStateFlags & nsIWebProgressListener.STATE_START) {
+          prepareContentBrowser(b);
+          try { b.docShellIsActive = true; } catch (e) {}
           let requestSpec = "";
+          let requestOriginal = "";
           try {
             let channel = aRequest && aRequest.QueryInterface(Ci.nsIChannel);
             let spec = channel && channel.URI && channel.URI.spec;
             requestSpec = spec || "";
-            if (spec && zbIsPdfUrl(spec)) {
+            requestOriginal = (channel && channel.originalURI && channel.originalURI.spec) || "";
+            let tab = tabs.find(t => t.browser === b);
+            if (spec && zbIsPdfUrl(spec) && !locationIgnored(tab, spec, requestOriginal)) {
               aRequest.cancel(Cr.NS_BINDING_ABORTED);
               if (b !== browser) {
-                let tab = tabs.find(t => t.browser === b);
                 if (tab) {
                   activateTab(tab.id);
                 }
@@ -2122,13 +2282,27 @@ function zbBuildSidebarBrowser(doc, body, options = {}) {
           } catch (e) {}
           if (b === browser) {
             let tab = currentTab();
-            if (!(tab && tab.homeOpen) && requestSpec !== "about:blank") {
+            if (/^https?:/i.test(requestSpec) && locationIgnored(tab, requestSpec, requestOriginal)) {
+              coverNavigation();
+            } else if (!(tab && tab.homeOpen) && requestSpec !== "about:blank") {
               hideWelcome();
               startProgress(true);
             }
           }
         }
         if ((aStateFlags & nsIWebProgressListener.STATE_STOP) && b === browser) {
+          let spec = "";
+          let original = "";
+          try {
+            let channel = aRequest && aRequest.QueryInterface(Ci.nsIChannel);
+            spec = (channel && channel.URI && channel.URI.spec) || "";
+            original = (channel && channel.originalURI && channel.originalURI.spec) || "";
+          } catch (e) {}
+          let tab = tabs.find(t => t.browser === b);
+          if (!locationIgnored(tab, spec, original)) {
+            if (tab) tab.expectedUrl = "";
+            uncoverNavigation();
+          }
           stopProgress();
           openingPdfUrl = null;
           openingPdfAt = 0;
@@ -2352,14 +2526,10 @@ function zbBuildSidebarBrowser(doc, body, options = {}) {
     }
     activeTabId = tab.id;
     browser = tab.browser;
+    uncoverNavigation();
     welcomeView.firstElementChild.style.zoom = String(tab.pageZoom || 1);
     tabs.forEach((t) => {
-      let on = t.id === tab.id;
-      try {
-        t.browser.hidden = !on;
-      } catch (e) {}
-      t.browser.style.visibility = on ? "visible" : "hidden";
-      t.browser.style.zIndex = on ? "1" : "0";
+      placeBrowser(t.browser, t.id === tab.id);
     });
     currentPdfUrl = tab.pdfUrl || null;
     updateCiteURL(tab.pdfUrl || tab.url || "");
@@ -2415,11 +2585,13 @@ function zbBuildSidebarBrowser(doc, body, options = {}) {
         pdfClosedUrl: null,
         homeOpen: wantsHome,
         pageZoom: 1,
-        popupPending: !!opts.popup
+        popupPending: !!opts.popup,
+        _zbFresh: true
       };
       tabs.push(tab);
       activeTabId = tab.id;
       browser = tab.browser;
+      placeBrowser(tab.browser, true);
       renderTabBar();
       if (wantsHome) {
         showWelcome();
@@ -2450,22 +2622,35 @@ function zbBuildSidebarBrowser(doc, body, options = {}) {
       pdfClosedUrl: null,
       homeOpen: wantsHome,
       pageZoom: 1,
-      popupPending: !!opts.popup
+      popupPending: !!opts.popup,
+      _zbFresh: true
     };
     tabs.push(tab);
-    if (opts.activate === false) {
-      // 后台标签页（如 PDF 阅读器中点击的参考文献链接）：直接在新标签的
-      // browser 里加载，不切换当前标签、不打断 PDF 阅读。
+    if (opts.deferLoad) {
+      // Firefox loads this browsing context once after createContentWindow.
+      // Keep the current page on screen until that document commits, and keep
+      // the new browser offscreen so the opener's previous page cannot flash.
+      placeBrowser(b, false);
+      prepareContentBrowser(b);
+      if (target && target !== "about:blank") tab.expectedUrl = target;
+      tab._zbFresh = false;
       try {
-        b.hidden = true;
+        if (!b.browsingContext) {
+          b.loadURI(Services.io.newURI("about:blank"), {
+            triggeringPrincipal: SYSTEM_PRINCIPAL,
+            loadFlags: Ci.nsIWebNavigation.LOAD_FLAGS_REPLACE_HISTORY
+          });
+        }
       } catch (e) {}
-      b.style.visibility = "hidden";
-      b.style.zIndex = "0";
+      renderTabBar();
+      return tab;
+    }
+    if (opts.activate === false) {
+      placeBrowser(b, false);
       if (!wantsHome && target && target !== "about:blank") {
-        try {
-          let uri = Services.io.newURI(target);
-          b.loadURI(uri, { triggeringPrincipal: SYSTEM_PRINCIPAL });
-        } catch (e) {}
+        tab.expectedUrl = target;
+        tab._zbFresh = false;
+        loadInBrowser(b, target, true);
       }
       renderTabBar();
       return tab;
@@ -2498,6 +2683,12 @@ function zbBuildSidebarBrowser(doc, body, options = {}) {
       return;
     }
     let tab = tabs[idx];
+    if (activeTabId === id) {
+      let next = tabs[idx === tabs.length - 1 ? idx - 1 : idx + 1];
+      // Show the remaining page before stopping this one. stop() otherwise
+      // paints an older history entry in the viewport that is about to close.
+      activateTab(next.id, { skipSnapshot: true });
+    }
     try {
       tab.browser.stop();
     } catch (e) {}
@@ -2505,12 +2696,7 @@ function zbBuildSidebarBrowser(doc, body, options = {}) {
       tab.browser.remove();
     } catch (e) {}
     tabs.splice(idx, 1);
-    if (activeTabId === id) {
-      let next = tabs[Math.min(idx, tabs.length - 1)];
-      activateTab(next.id, { skipSnapshot: true });
-    } else {
-      renderTabBar();
-    }
+    renderTabBar();
   }
 
   attachBrowserEngine(browser);
@@ -4158,8 +4344,8 @@ function zbBuildSidebarBrowser(doc, body, options = {}) {
     let text = doc.createElement("span");
     text.style.cssText = "flex:1 1 220px;min-width:0;";
     text.textContent = blocked
-      ? "站点拒绝了本次访问。可更新 Zotero 后重试，或在系统浏览器检查该站点。"
-      : "请在网页中完成验证。若反复失败，请检查网络并更新 Zotero；内嵌浏览器可能不被站点完整支持。";
+      ? "站点拒绝了本次访问。可更新 Zotero 后重试，或在系统浏览器打开。"
+      : "请在页面里完成验证。验证框会留在前台；如果页面自己反复刷新，再用系统浏览器打开。";
     captchaBar.appendChild(text);
     let button = (label, action) => {
       let el = doc.createElement("button");
@@ -4533,12 +4719,14 @@ function zbBuildSidebarBrowser(doc, body, options = {}) {
   registerDispose(() => wrapper.removeEventListener("keydown", wrapperKeydownHandler, true));
 
   viewport.appendChild(browser);
+  prepareContentBrowser(browser);
   // The initial browser is configured before it is inserted into the document.
   // Retry the compatibility frame bridge now that its message manager exists.
   attachLegacyFrameBridge(browser);
   viewport.appendChild(pdfFrame);
   setupPdfMessageBridge();
   viewport.appendChild(pdfFallback);
+  viewport.appendChild(navCover);
   viewport.appendChild(welcomeView);
 
   let resizeBar = doc.createElement("div");
@@ -4743,6 +4931,10 @@ function zbBuildSidebarBrowser(doc, body, options = {}) {
       if (progressTimer) {
         clearTimeout(progressTimer);
         progressTimer = null;
+      }
+      if (navCoverTimer) {
+        clearTimeout(navCoverTimer);
+        navCoverTimer = null;
       }
       if (autoTranslateTimer) {
         clearTimeout(autoTranslateTimer);

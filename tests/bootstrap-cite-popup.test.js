@@ -76,7 +76,7 @@ test("reader toolbar retains copy PDF and uses bounded SVG icons with accessible
     Zotero: { Reader: { registerEventListener: (_name, fn) => { handler = fn; } }, Items: { get: id => ({ id }) } },
     zbReaderPaperTitle: () => "Paper", zbSetDockContextTitle() {},
     zbCopyPDFFile: (_win, item) => actions.push(["copy", item.id]), zbOpenCite: (_win, item) => actions.push(["cite", item.id]),
-    toggleRightBrowser: () => actions.push(["browser"]), dump: error => { throw new Error(error); }
+    toggleRightBrowser: () => actions.push(["browser"]), zbInstallWindowBrowserControls() {}, dump: error => { throw new Error(error); }
   });
   functions(["zbToolbarIcon", "registerReaderToolbarButton"], ctx);
   ctx.registerReaderToolbarButton();

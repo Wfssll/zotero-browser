@@ -377,11 +377,14 @@
 
       // Add to currently selected collection if available
       let pane = zotero.getActiveZoteroPane ? zotero.getActiveZoteroPane() : null;
-      if (pane && pane.getSelectedCollection) {
-        let collection = pane.getSelectedCollection();
-        if (collection) {
-          item.addToCollection(collection.id);
-        }
+      if (pane) {
+        const libraryIDs = typeof pane.getSelectedLibraryIDs === "function"
+          ? pane.getSelectedLibraryIDs() : [pane.getSelectedLibraryID()].filter(Boolean);
+        if (libraryIDs.length !== 1) throw new Error("请先选择一个资料库中的分类或资料库");
+        item.libraryID = libraryIDs[0];
+        const collections = typeof pane.getSelectedCollections === "function"
+          ? pane.getSelectedCollections() : [pane.getSelectedCollection()].filter(Boolean);
+        for (const collection of collections) item.addToCollection(collection.id);
       }
 
       await item.saveTx();

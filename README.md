@@ -9,8 +9,8 @@ source-specific bilingual vocabulary notes, and one-click local PDF copying.
 [使用说明](docs/USAGE.md) · [问题反馈](https://github.com/Wfssll/zotero-browser/issues) ·
 [隐私说明](PRIVACY.md)
 
-> **当前公开预发布版：0.0.2。** 当前安装范围为 **Zotero 9.0.x**。
-> 本机核验基于 macOS + Zotero 9.0.6；Windows/Linux 和完整安装包操作尚待验证。
+> **当前公开预发布版：0.0.3。** 安装范围为 **Zotero 9.0–10.0.x**，包含 Zotero 10.0.6。
+> 已在本机 macOS + Zotero 10.0.6 安装并打开主窗口浏览器；独立阅读窗口的浏览器和 Windows/Linux 尚待完整验证。
 > 界面目前主要为中文。它是独立社区插件，与 Zotero 和 NASA ADS 无官方隶属关系。
 
 ![主页与背景图库预览](docs/skin-gallery-preview.png)
@@ -20,7 +20,8 @@ source-specific bilingual vocabulary notes, and one-click local PDF copying.
 ## 安装
 
 1. 打开 [Releases](https://github.com/Wfssll/zotero-browser/releases)，下载
-   `zotero-browser-0.0.2.xpi`（不要下载 GitHub 自动生成的 Source code 压缩包）。
+   `zotero-browser-0.0.3.xpi`（不要下载 GitHub 自动生成的 Source code 压缩包，
+   也不要继续使用只支持 Zotero 9 的 0.0.2 包）。
 2. Zotero → 工具 → 插件，点击齿轮 → 从文件安装插件，选择 `.xpi`。
 3. 在主工具栏点击地球图标打开右侧浏览器；再次点击可折叠。也可用
    `Command + Shift + B`（macOS）或 `Ctrl + Shift + B`（Windows/Linux）。
@@ -51,7 +52,7 @@ Cite 显示 ADS 返回的原始 BibTeX。没有可靠匹配时会提示原因，
 
 ## 当前限制
 
-- 此次预发布不宣称兼容 Zotero 7/8/10，也未完成 Windows/Linux 实机验证。
+- 当前兼容声明覆盖 Zotero 9.0–10.0.x；不包含 Zotero 7/8/11，也未完成 Windows/Linux 实机验证。
 - 自动测试和本机 API/UI 核验不能替代安装包的完整操作测试。验证范围见
   [发布检查清单](docs/RELEASE_CHECKLIST.md)。
 - 标签页和网页缩放目前主要保留在当前窗口会话中；尚无完整的重启会话恢复。

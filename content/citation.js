@@ -36,6 +36,22 @@ var zbCitation = (() => {
       title: arxiv ? "arXiv:" + arxiv : doi || bibcode };
   }
 
+  function selectedCollections(pane) {
+    return typeof pane.getSelectedCollections === "function"
+      ? pane.getSelectedCollections() : [pane.getSelectedCollection()].filter(Boolean);
+  }
+
+  function selectedLibraryIDs(pane) {
+    return typeof pane.getSelectedLibraryIDs === "function"
+      ? pane.getSelectedLibraryIDs() : [pane.getSelectedLibraryID()].filter(Boolean);
+  }
+
+  function sourceFromPane(url, pane) {
+    const libraryIDs = selectedLibraryIDs(pane);
+    if (libraryIDs.length !== 1) throw new Error("请先在 Zotero 左侧选择一个资料库中的分类或资料库");
+    return sourceFromURL(url, libraryIDs[0], selectedCollections(pane).map(c => c.id));
+  }
+
   function createService(Z, options = {}) {
     let guest = null, guestPending = null;
     const cache = new Map(), pending = new Map(), saves = new Map();
@@ -224,15 +240,20 @@ var zbCitation = (() => {
 
     async function targets(scope, pane, recursive = true) {
       let items;
-      const libraryID = pane.getSelectedLibraryID();
       if (scope === "selected") items = pane.getSelectedItems();
       else if (scope === "collection") {
-        const collection = pane.getSelectedCollection();
-        if (!collection) throw new Error("请先在 Zotero 左侧选择一个分类文件夹");
-        const collections = [collection];
-        if (recursive) collections.push(...collection.getDescendents(false, "collection", false).map(c => Z.Collections.get(c.id)));
+        const selected = selectedCollections(pane);
+        if (!selected.length) throw new Error("请先在 Zotero 左侧选择一个分类文件夹");
+        const collections = [...selected];
+        if (recursive) for (const collection of selected) {
+          collections.push(...collection.getDescendents(false, "collection", false).map(c => Z.Collections.get(c.id)));
+        }
         items = collections.flatMap(c => c.getChildItems(false));
-      } else if (scope === "library") items = await Z.Items.getAll(libraryID, true, false);
+      } else if (scope === "library") {
+        const libraryIDs = selectedLibraryIDs(pane);
+        if (!libraryIDs.length) throw new Error("请先在 Zotero 左侧选择资料库");
+        items = (await Promise.all(libraryIDs.map(id => Z.Items.getAll(id, true, false)))).flat();
+      }
       else throw new Error("未知批量范围");
       const seen = new Set();
       return items.map(item => item.parentID ? Z.Items.get(item.parentID) : item).filter(item => {
@@ -268,6 +289,6 @@ var zbCitation = (() => {
     }
     return { itemSource, retrieve, save, targets, batch, combine, stored, previewSource: sourceFromURL };
   }
-  return { createService, arxivID, doiID, adsBibcode, sourceFromURL };
+  return { createService, arxivID, doiID, adsBibcode, sourceFromURL, sourceFromPane };
 })();
 if (typeof module === "object" && module.exports) module.exports = zbCitation;

@@ -384,7 +384,7 @@ function installPopupRouter(win) {
     return BrowserHub.findByBrowsingContext(bc) || BrowserHub.findByBrowser(openerBrowser);
   }
 
-  function openPluginTab(inst, uri, title) {
+  function openPluginTab(inst, uri, title, deferLoad) {
     if (!inst || typeof inst.addTab !== "function") {
       return null;
     }
@@ -396,7 +396,10 @@ function installPopupRouter(win) {
       return inst.addTab(url, {
         showHome: false,
         title: title || (url === "about:blank" ? "请稍候…" : "新标签页"),
-        popup: true
+        popup: true,
+        // createContentWindow's caller performs the only load. Loading here
+        // too races that load and paints the opener's previous document.
+        deferLoad: !!deferLoad
       });
     } catch (e) {
       dump("[Zotero Browser] popup tab error: " + e + "\n");
@@ -421,7 +424,7 @@ function installPopupRouter(win) {
       if (!inst) {
         return delegate("createContentWindow", arguments);
       }
-      let tab = openPluginTab(inst, aURI, "请稍候…");
+      let tab = openPluginTab(inst, aURI, "请稍候…", true);
       return tab && tab.browser && tab.browser.browsingContext;
     },
 
@@ -441,7 +444,7 @@ function installPopupRouter(win) {
       if (!inst) {
         return delegate("createContentWindowInFrame", arguments);
       }
-      let tab = openPluginTab(inst, aURI, aName || "请稍候…");
+      let tab = openPluginTab(inst, aURI, aName || "请稍候…", true);
       return tab && tab.browser;
     },
 
@@ -835,8 +838,7 @@ function zbCiteOptions(doc, getSource) {
     getPane: () => Zotero.getActiveZoteroPane(),
     sourceFromInput: value => {
       const pane = Zotero.getActiveZoteroPane();
-      const collection = pane.getSelectedCollection();
-      return zbCitation.sourceFromURL(value, pane.getSelectedLibraryID(), collection ? [collection.id] : []);
+      return zbCitation.sourceFromPane(value, pane);
     },
     openURL: url => Zotero.launchURL(url),
     copy: text => {
@@ -997,9 +999,8 @@ var zbReaderTabObserverID = null;
 
 /**
  * Inject a browser button into the PDF reader toolbar via the official
- * Zotero.Reader event API.  A reader window that is also a Zotero main
- * window uses its same-document dock; an independent reader window opens
- * the main window’s dock.
+ * Zotero.Reader event API.  A reader tab inside the main window uses that
+ * window's dock.  A paper opened in its own window gets a separate dock.
  */
 function zbToolbarIcon(name, size = 18) {
   const paths = {
@@ -1034,13 +1035,14 @@ function registerReaderToolbarButton() {
         let btn = doc.createElement("button");
         btn.className = "toolbar-button";
         btn.id = "zb-reader-browser-btn";
-        btn.title = "折叠/展开主窗口右侧浏览器";
+        btn.title = "折叠/展开此窗口的浏览器";
         btn.setAttribute("aria-label", "浏览器");
         btn.tabIndex = -1;
         btn.innerHTML = zbToolbarIcon("browser");
+        if (readerWin) zbInstallWindowBrowserControls(readerWin);
         btn.addEventListener("click", (e) => {
           e.preventDefault();
-          toggleRightBrowser(reader && reader._window ? reader._window : null);
+          toggleRightBrowser(readerWin);
         });
         const copyButton = doc.createElement("button");
         copyButton.className = "toolbar-button";
@@ -1149,8 +1151,10 @@ function registerReaderTabObserver() {
           return;
         }
         // A library/search tab has no Reader instance.  Clear stale paper
-        // context from every mounted main-window dock.
+        // context on main-window docks only; a detached reader window keeps
+        // the title of the paper open in that window.
         for (let state of zbDockStates.values()) {
+          if (state && state.ownLayout) continue;
           zbDockApplyContextTitle(state, "内置浏览器");
         }
       }
@@ -1206,6 +1210,18 @@ function zbRemoveBackgroundImage(path) {
 
 function loadSidebarScript() {
   zbSandbox.zbZoom = ChromeUtils.importESModule("resource://zotero-browser/content/zoom.sys.mjs").zbZoom;
+  try {
+    zbSandbox.zbBrowserEnv = ChromeUtils.importESModule(
+      "resource://zotero-browser/content/browser-env.sys.mjs"
+    ).zbBrowserEnv;
+  } catch (e) {
+    dump("[Zotero Browser] browser env: " + e + "\n");
+    zbSandbox.zbBrowserEnv = {
+      stockUserAgent(ua) { return String(ua || ""); },
+      sameNavigation(a, b) { return !!a && a === b; },
+      shouldIgnoreLocation() { return false; }
+    };
+  }
   if (!zbBackgroundService) {
     try {
       Services.scriptloader.loadSubScript("chrome://zotero-browser/content/backgrounds.js", zbSandbox);
@@ -1608,7 +1624,12 @@ function zbDockClampWidth(value, win) {
   }
   let max = ZB_DOCK_MAX_WIDTH;
   try {
-    let viewport = win && win.document && win.document.getElementById("browser");
+    let doc = win && win.document;
+    let viewport = doc && doc.getElementById("browser");
+    if (!viewport && doc) {
+      let reader = doc.getElementById("zotero-reader");
+      viewport = reader && reader.parentNode;
+    }
     let available = viewport && viewport.getBoundingClientRect ? viewport.getBoundingClientRect().width : 0;
     if (available > 0) {
       // Include the 7px divider, and permit a narrower dock in small windows.
@@ -1696,7 +1717,43 @@ function zbFindMainDockPlacement(win) {
         !zbNodeContains(paneStack, tabsDeck) || !zbNodeContains(tabsDeck, pane)) {
       return null;
     }
-    return { doc, container: browserRoot, appcontent, paneStack, tabsDeck, pane };
+    return { kind: "main", doc, container: browserRoot, appcontent, paneStack, tabsDeck, pane };
+  } catch (e) {
+    return null;
+  }
+}
+
+function zbIsReaderWindow(win) {
+  try {
+    if (!win || win.closed || !win.document) return false;
+    let doc = win.document;
+    let root = doc.documentElement;
+    if (root && (root.id === "pdf-reader" || root.getAttribute("windowtype") === "zotero:reader")) {
+      return true;
+    }
+    return /\/reader\.xhtml(?:$|[?#])/.test(String(doc.documentURI || ""));
+  } catch (e) {
+    return false;
+  }
+}
+
+/**
+ * Zotero's standalone reader.xhtml keeps the paper in
+ * `<hbox><vbox id="zotero-reader">`. The dock is a sibling of that vbox.
+ * Any other shape returns null so the PDF layout is left unchanged.
+ */
+function zbFindReaderDockPlacement(win) {
+  try {
+    if (!zbIsReaderWindow(win)) return null;
+    let doc = win.document;
+    let reader = doc.getElementById("zotero-reader");
+    let row = reader && reader.parentNode;
+    if (!reader || !row || row === doc.documentElement || typeof row.appendChild !== "function") {
+      return null;
+    }
+    let name = String(row.localName || row.tagName || "").toLowerCase();
+    if (name !== "hbox") return null;
+    return { kind: "reader", doc, container: row, reader, appcontent: null };
   } catch (e) {
     return null;
   }
@@ -1811,7 +1868,7 @@ function zbDockSetCollapsed(state, collapsed, persist) {
   if (state.contextLabel) {
     state.contextLabel.style.display = state.collapsed ? "none" : "block";
   }
-  if (persist) {
+  if (persist && !state.ownLayout) {
     zbDockSaveCollapsed(state.collapsed);
   }
 }
@@ -1824,7 +1881,7 @@ function zbDockApplyWidth(state, width, persist) {
   if (!state.collapsed) {
     zbDockSetCollapsed(state, false, false);
   }
-  if (persist) {
+  if (persist && !state.ownLayout) {
     zbDockSaveWidth(state.width);
   }
 }
@@ -1916,7 +1973,10 @@ function zbDockCreateState(win, placement) {
     host: null,
     instance: null,
     width: zbDockLoadWidth(win),
-    collapsed: zbDockLoadCollapsed(),
+    // A detached paper window starts closed. Its open/closed state must not
+    // rewrite the main window's dock preference.
+    collapsed: placement.kind === "reader" ? true : zbDockLoadCollapsed(),
+    ownLayout: placement.kind === "reader",
     contextTitle: "内置浏览器",
     resizeInstalled: false,
     resizing: false,
@@ -1984,6 +2044,17 @@ function zbDockCreateState(win, placement) {
   state.contextLabel = contextLabel;
   state.collapseButton = collapseButton;
   state.host = host;
+  if (placement.reader && placement.reader.style) {
+    placement.reader.style.flex = "1 1 auto";
+    placement.reader.style.minWidth = "0";
+    placement.reader.style.minHeight = "0";
+  }
+  if (placement.kind === "reader" && placement.container && placement.container.style) {
+    placement.container.style.minWidth = "0";
+    placement.container.style.minHeight = "0";
+    root.style.height = "100%";
+    root.style.alignSelf = "stretch";
+  }
   zbDockApplyContextTitle(state, win.__zoteroBrowserDockContextTitle || "内置浏览器");
   zbDockInstallResize(state);
   zbDockSetCollapsed(state, state.collapsed, false);
@@ -2043,10 +2114,13 @@ function zbScheduleDockRetry(win) {
 
 function zbEnsureDockForWindow(win, retryMissing = true) {
   let placement = zbFindMainDockPlacement(win);
+  if (!placement && typeof zbFindReaderDockPlacement === "function") {
+    placement = zbFindReaderDockPlacement(win);
+  }
   if (!placement) {
-    // An independent Reader window has no main-pane IDs and should go
-    // to the main-window dock. Retry only while the verified main
-    // document is still being assembled.
+    // Retry only while a main document is still being assembled. A reader
+    // window that does not match the verified row keeps the main-window
+    // fallback in zbResolveDockWindow instead of guessing a mount point.
     let doc = null;
     try { doc = win && win.document; } catch (e) {}
     let looksLikeMain = !!(doc && (doc.getElementById("zotero-pane-stack") ||
@@ -2072,6 +2146,10 @@ function zbEnsureDockForWindow(win, retryMissing = true) {
     try {
       win.__zoteroBrowserDockState = state;
     } catch (e) {}
+  }
+  if (placement.kind === "reader") {
+    try { installPopupRouter(win); } catch (e) {}
+    try { zbInstallWindowBrowserControls(win); } catch (e) {}
   }
   if (!state.instance) {
     zbDockInstantiate(state);
@@ -2105,6 +2183,7 @@ function zbToggleDock(win) {
 
 function zbResolveDockWindow(win) {
   if (zbFindMainDockPlacement(win)) return win;
+  if (typeof zbFindReaderDockPlacement === "function" && zbFindReaderDockPlacement(win)) return win;
   return getZoteroWindows().find(candidate => zbFindMainDockPlacement(candidate)) || null;
 }
 
@@ -2275,6 +2354,21 @@ function zbEventMatchesCombo(e, combo) {
   return ek === key;
 }
 
+function zbInstallWindowBrowserControls(win) {
+  if (!win || win._zoteroBrowserKeyHandler) return;
+  win._zoteroBrowserKeyHandler = function (e) {
+    try {
+      if (win.__zbRecordingShortcut) return;
+    } catch (err) {}
+    if (zbEventMatchesCombo(e, zbGetToggleShortcutCombo())) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!e.repeat) toggleRightBrowser(win);
+    }
+  };
+  win.addEventListener("keydown", win._zoteroBrowserKeyHandler, true);
+}
+
 function addToWindow(win) {
   let doc = win.document;
   if (!doc) return;
@@ -2353,21 +2447,7 @@ function addToWindow(win) {
     toolbar.insertBefore(button, globe ? globe.nextSibling : null);
   }
 
-  if (!win._zoteroBrowserKeyHandler) {
-    win._zoteroBrowserKeyHandler = function (e) {
-      try {
-        if (win.__zbRecordingShortcut) {
-          return; // 设置面板正在录制快捷键，不触发切换
-        }
-      } catch (err) {}
-      if (zbEventMatchesCombo(e, zbGetToggleShortcutCombo())) {
-        e.preventDefault();
-        e.stopPropagation();
-        if (!e.repeat) toggleRightBrowser(win);
-      }
-    };
-    win.addEventListener("keydown", win._zoteroBrowserKeyHandler, true);
-  }
+  if (!win._zoteroBrowserKeyHandler) zbInstallWindowBrowserControls(win);
 
   // Mount once per main-window document.  If startup ran before Zotero's
   // xhtml finished loading, zbEnsureDockForWindow schedules a bounded retry.

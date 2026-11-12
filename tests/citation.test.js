@@ -4,7 +4,7 @@ const assert = require("node:assert/strict");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const vm = require("node:vm");
-const { createService, arxivID, doiID, adsBibcode, sourceFromURL } = require("../content/citation.js");
+const { createService, arxivID, doiID, adsBibcode, sourceFromURL, sourceFromPane } = require("../content/citation.js");
 
 const bibcode = "2026arXiv260936355G";
 const bibtex = "@ARTICLE{" + bibcode + ",\n title = {A <paper> & result},\n eprint = {2609.36355}\n}\n";
@@ -72,6 +72,46 @@ function host(options = {}) {
   }
   return { Z, items, calls, paper, service: createService(Z, { request, getToken: options.getToken }), request };
 }
+
+test("manual Cite uses Zotero 10 plural selection and rejects ambiguous destination libraries", () => {
+  const pane = {
+    getSelectedLibraryIDs: () => [2],
+    getSelectedCollections: () => [{ id: 12 }, { id: 13 }],
+    getSelectedLibraryID() { throw new Error("removed singular getter"); },
+    getSelectedCollection() { throw new Error("removed singular getter"); }
+  };
+  const source = sourceFromPane("10.1234/example", pane);
+  assert.equal(source.libraryID, 2);
+  assert.deepEqual(source.collections, [12, 13]);
+  for (const ids of [[], [1, 2]]) {
+    assert.throws(() => sourceFromPane("10.1234/example", { ...pane, getSelectedLibraryIDs: () => ids }), /选择一个资料库/);
+  }
+  const legacy = sourceFromPane("10.1234/example", {
+    getSelectedLibraryID: () => 1, getSelectedCollection: () => ({ id: 7 })
+  });
+  assert.equal(legacy.libraryID, 1);
+  assert.deepEqual(legacy.collections, [7]);
+});
+
+test("batch Cite handles multiple Zotero 10 collections and libraries without singular getters", async () => {
+  const collections = new Map();
+  const h = host({ collections });
+  const first = h.paper("First"), second = h.paper("Second", {}, 2);
+  const child = { id: 13, getChildItems: () => [first], getDescendents: () => [] };
+  const parent = { id: 12, getChildItems: () => [first], getDescendents: () => [{ id: 13 }] };
+  const other = { id: 14, getChildItems: () => [second], getDescendents: () => [] };
+  collections.set(13, child);
+  const pane = {
+    getSelectedCollections: () => [parent, child, other], getSelectedLibraryIDs: () => [1, 2],
+    getSelectedLibraryID() { throw new Error("removed singular getter"); },
+    getSelectedCollection() { throw new Error("removed singular getter"); }
+  };
+  for (const scope of ["collection", "library"]) {
+    assert.deepEqual((await h.service.targets(scope, pane)).map(s => s.itemID), [first.id, second.id]);
+  }
+  assert.deepEqual((await h.service.targets("selected", { getSelectedItems: () => [second] })).map(s => s.itemID), [second.id]);
+  await assert.rejects(h.service.targets("library", { getSelectedLibraryIDs: () => [] }), /选择资料库/);
+});
 
 test("canonical arXiv IDs include versions, old IDs and query strings, while foreign hosts are rejected", () => {
   assert.equal(arxivID("https://arxiv.org/pdf/2609.36355v2.pdf?download=1"), "2609.36355");

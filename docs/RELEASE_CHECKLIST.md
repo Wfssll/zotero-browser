@@ -1,5 +1,15 @@
 # Release checklist and validation status
 
+## 0.0.3 Zotero 10 compatibility fix
+
+- Local host: macOS, Zotero 10.0.6 (application.ini and Info.plist); Gecko 140.17.0.
+- Root cause: the 0.0.2 XPI declares strict_max_version 9.0.*, excluding the installed host. The 0.0.3 package extends this to 10.0.* while preserving the plugin ID and minimum 9.0.
+- Audited the Zotero 10 developer migration notes and installed host selection API source; migrated remaining Cite and standalone-save singular selection calls to plural APIs with legacy fallbacks.
+- 89 automated tests pass. New tests exercise multiple and overlapping collections, multiple libraries, manual Cite destination validation, selected items without collection getters, Zotero 9 fallbacks, reader-window dock placement and browser navigation.
+- Installed dist/zotero-browser-0.0.3.xpi through the real Zotero 10.0.6 Plugins Manager: version 0.0.3 appears under Enabled. The main Browser/Cite buttons are present and the right browser dock opens with its home search controls.
+- Published as GitHub pre-release v0.0.3. The stable update feed stays empty, so existing installs do not update automatically.
+- Full installed-package workflows, the standalone reader-window dock, and Windows/Linux remain unverified.
+
 ## 0.0.2 Safari fix validation
 
 - 82 automated tests pass, including access denial, readable/invalid files, picker cancellation, source retention, domain filtering and cross-global binary views.
